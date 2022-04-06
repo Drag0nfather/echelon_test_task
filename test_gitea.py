@@ -1,6 +1,6 @@
 import json
 import os
-
+import time
 import requests
 from mimesis import Person, Text
 import pytest
@@ -10,6 +10,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
+import docker
 
 
 class TestGitea:
@@ -33,6 +34,20 @@ class TestGitea:
     def input_value(self, driver, action, elem, value):
         self.clicker(driver, elem)
         return action.send_keys(value).perform()
+
+    def test_docker_start(self):
+        global resp_status
+        client = docker.from_env()
+        client.containers.run(image='gitea/gitea', detach=True, ports={'3000/tcp': 3000}, name='gitea')
+
+        gitea_page = 'http://localhost:3000/'
+        for i in range(10):
+            resp_status = requests.get(gitea_page).status_code
+            if resp_status == 200:
+                break
+            else:
+                time.sleep(5)
+        assert resp_status == 200, 'Не получилось запустить контейнер с Gitea'
 
     def test_page_availability(self):
         gitea_page = requests.get(
@@ -112,6 +127,7 @@ class TestGitea:
         driver, action = setup_session
         with open(os.path.join(os.getcwd(), "user_data.json")) as f:
             load_json = json.load(f)
+            os.remove(os.path.join(os.getcwd(), "user_data.json"))
         self.clicker(driver, '//a[@href="/user/login?redirect_to="]')
         self.input_value(driver, action, '//input[@id="user_name"]', load_json['email'])
         self.input_value(driver, action, '//input[@id="password"]', load_json['passw'])
