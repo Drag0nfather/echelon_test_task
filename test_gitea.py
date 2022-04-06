@@ -39,7 +39,6 @@ class TestGitea:
         global resp_status
         client = docker.from_env()
         client.containers.run(image='gitea/gitea', detach=True, ports={'3000/tcp': 3000}, name='gitea')
-
         gitea_page = 'http://localhost:3000/'
         for i in range(10):
             resp_status = requests.get(gitea_page).status_code
@@ -142,3 +141,18 @@ class TestGitea:
         text_from_gitea_hash = driver.find_element(By.XPATH, '//pre').text.__hash__()
         hash_from_output_file = load_json['file_hash']
         assert text_from_gitea_hash == hash_from_output_file, 'Файл в Gitea не совпадает с созданным'
+
+    def test_stop_docker(self):
+        global resp_status
+        client = docker.from_env()
+        asdf = client.containers.list(filters={'name': 'gitea'})[0]
+        asdf.stop()
+        asdf.remove()
+        gitea_page = 'http://localhost:3000/'
+        for i in range(10):
+            resp_status = requests.get(gitea_page).status_code
+            if resp_status != 200:
+                break
+            else:
+                time.sleep(5)
+        assert resp_status != 200, 'Не получилось погасить контейнер с Gitea'
