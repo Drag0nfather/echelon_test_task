@@ -2,7 +2,6 @@ import json
 import os
 
 import requests
-from git import Repo, Actor
 from mimesis import Person, Text
 import pytest
 from selenium import webdriver
@@ -108,3 +107,22 @@ class TestGitea:
                     f'src/branch/master/'
                     f'{load_json["file_name"]}')
         assert driver.current_url == curr_url, 'Коммит с файлом не создан'
+
+    def test_same_files(self, setup_session):
+        driver, action = setup_session
+        with open(os.path.join(os.getcwd(), "user_data.json")) as f:
+            load_json = json.load(f)
+        self.clicker(driver, '//a[@href="/user/login?redirect_to="]')
+        self.input_value(driver, action, '//input[@id="user_name"]', load_json['email'])
+        self.input_value(driver, action, '//input[@id="password"]', load_json['passw'])
+        self.clicker(driver, '//button[contains(text(), "Вход")]')
+        repo_url = (f'http://localhost:3000/'
+                    f'{load_json["user_name"]}/'
+                    f'{load_json["repo_name"]}/'
+                    f'src/branch/master/'
+                    f'{load_json["file_name"]}')
+        driver.get(repo_url)
+        self.clicker(driver, '//a[text()="Исходник"]')
+        text_from_gitea_hash = driver.find_element(By.XPATH, '//pre').text.__hash__()
+        hash_from_output_file = load_json['file_hash']
+        assert text_from_gitea_hash == hash_from_output_file, 'Файл в Gitea не совпадает с созданным'
