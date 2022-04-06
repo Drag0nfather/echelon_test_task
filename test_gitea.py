@@ -1,9 +1,8 @@
 import json
 import os
-import time
 
 import requests
-from git import Repo
+from git import Repo, Actor
 from mimesis import Person, Text
 import pytest
 from selenium import webdriver
@@ -53,7 +52,7 @@ class TestGitea:
         email = mimesis_person.email()
         self.input_value(driver, action, '//input[@id="email"]', email)
         passw = 'ASdf!@34'
-        with open(os.path.join(os.path.dirname(__file__), "user_data.json"), 'w', encoding='utf-8') as f:
+        with open(os.path.join(os.getcwd(), "user_data.json"), 'w', encoding='utf-8') as f:
             f.write(json.dumps({'user_name': user_name, 'email': email, 'passw': passw}, ensure_ascii=False))
         self.input_value(driver, action, '//input[@id="password"]', passw)
         self.input_value(driver, action, '//input[@id="retype"]', passw)
@@ -64,9 +63,9 @@ class TestGitea:
     def test_repo_create(self, setup_session):
         driver, action = setup_session
         mimesis_text = Text('en')
-        with open(os.path.join(os.path.dirname(__file__), "user_data.json")) as f:
+        with open(os.path.join(os.getcwd(), "user_data.json")) as f:
             load_json = json.load(f)
-            os.remove(os.path.join(os.path.dirname(__file__), "user_data.json"))
+            os.remove(os.path.join(os.getcwd(), "user_data.json"))
         self.clicker(driver, '//a[@href="/user/login?redirect_to="]')
         self.input_value(driver, action, '//input[@id="user_name"]', load_json['email'])
         self.input_value(driver, action, '//input[@id="password"]', load_json['passw'])
@@ -75,17 +74,37 @@ class TestGitea:
         repo_name = mimesis_text.word()
         load_json['repo_name'] = repo_name
         self.input_value(driver, action, '//input[@id="repo_name"]', repo_name)
-        with open(os.path.join(os.path.dirname(__file__), "user_data.json"), 'w+') as f:
+        with open(os.path.join(os.getcwd(), "user_data.json"), 'w+') as f:
             f.write(json.dumps(load_json, ensure_ascii=False))
         self.input_value(driver, action, '//textarea[@id="description"]', mimesis_text.text(quantity=1))
+        self.clicker(driver, '//label[contains(text(), "Инициализировать репозиторий")]')
         self.clicker(driver, '//button[contains(text(), "Создать репозиторий")]')
-        status = self.clicker(driver, '//h3[contains(text(), "Клонировать репозиторий")]', check_status=True)
+        status = self.clicker(driver, '//a[contains(text(), "Новый файл")]', check_status=True)
         assert status == True, 'Репозиторий не создан'
 
-    def test_repo_clone(self):
-        with open(os.path.join(os.path.dirname(__file__), "user_data.json")) as f:
+    def test_create_file(self, setup_session):
+        driver, action = setup_session
+        mimesis_file_name = Text('en').word()
+        mimesis_text = Text('en').text(quantity=20)
+        with open(os.path.join(os.getcwd(), "user_data.json")) as f:
             load_json = json.load(f)
-        address_to_clone = f'http://localhost:3000/{load_json["user_name"]}/{load_json["repo_name"]}'
-        assert requests.get(address_to_clone).status_code == 200, 'Страница репозитория недоступна'
-        Repo.clone_from(address_to_clone, os.path.join(os.path.dirname(__file__), load_json['repo_name']))
-        assert os.path.exists(load_json['repo_name']) == True, 'Репозиторий не склонирован локально'
+            os.remove(os.path.join(os.getcwd(), "user_data.json"))
+        self.clicker(driver, '//a[@href="/user/login?redirect_to="]')
+        self.input_value(driver, action, '//input[@id="user_name"]', load_json['email'])
+        self.input_value(driver, action, '//input[@id="password"]', load_json['passw'])
+        self.clicker(driver, '//button[contains(text(), "Вход")]')
+        self.clicker(driver, f'//strong[text()="{load_json["user_name"]}/{load_json["repo_name"]}"]')
+        self.clicker(driver, '//a[contains(text(), "Новый файл")]')
+        self.input_value(driver, action, '//input[@id="file-name"]', mimesis_file_name)
+        self.input_value(driver, action, '//pre[@class=" CodeMirror-line "]', mimesis_text)
+        self.clicker(driver, '//button[@id="commit-button"]')
+        load_json['file_name'] = mimesis_file_name
+        load_json['file_hash'] = mimesis_text.__hash__()
+        with open(os.path.join(os.getcwd(), "user_data.json"), 'w+') as f:
+            f.write(json.dumps(load_json, ensure_ascii=False))
+        curr_url = (f'http://localhost:3000/'
+                    f'{load_json["user_name"]}/'
+                    f'{load_json["repo_name"]}/'
+                    f'src/branch/master/'
+                    f'{load_json["file_name"]}')
+        assert driver.current_url == curr_url, 'Коммит с файлом не создан'
