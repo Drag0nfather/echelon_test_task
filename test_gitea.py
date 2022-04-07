@@ -152,9 +152,12 @@ class TestGitea:
                     f'{load_json["file_name"]}')
         driver.get(repo_url)
         self.clicker(driver, '//a[text()="Исходник"]')
-        text_from_gitea_hash = driver.find_element(By.XPATH, '//pre').text.__hash__()
+        hash_text_from_gitea = driver.find_element(By.XPATH, '//pre').text.__hash__()
         hash_from_output_file = load_json['file_hash']
-        assert text_from_gitea_hash == hash_from_output_file, 'Файл в Gitea не совпадает с созданным'
+        load_json['hash_text_from_gitea'] = hash_text_from_gitea
+        with open(os.path.join(os.getcwd(), "user_data.json"), 'w+') as f:
+            f.write(json.dumps(load_json, ensure_ascii=False))
+        assert hash_text_from_gitea == hash_from_output_file, 'Файл в Gitea не совпадает с созданным'
 
     def test_stop_docker(self):
         global resp_status
@@ -169,3 +172,31 @@ class TestGitea:
         except:
             resp_status = 500
         assert resp_status != 200, 'Не получилось погасить контейнер с Gitea'
+
+    def test_show_report(self):
+        self.create_report()
+        assert True
+
+    def create_report(self):
+        with open(os.path.join(os.getcwd(), "user_data.json")) as f:
+            load_json = json.load(f)
+            os.remove(os.path.join(os.getcwd(), "user_data.json"))
+        print(f'\n\n\n\n\n'
+              f'********************************************************************************\n'
+              f'Проведено тестирование сервиса Gitea\n'
+              f'Сервис развернут в Docker-контейнере, используя официальный образ gitea\n'
+              f'После запуска контейнера проверена доступность сервиса на открытом 3000 порту\n'
+              f'Следующим тестом проверена установка стартовых настроек базы данных gitea\n'
+              f'Следующие 3 теста - проверка на создание пользователя, репозитория и файла\n'
+              f'в нем (использовалась библиотека mimesis для генерации тестовых данных)\n'
+              f'Следующим тестом проверены хэши исходного файла и файла на странице репозитория\n'
+              f'Последний тест - проверка на закрытие контейнера\n\n'
+              f'Созданные тестом данные:\n'
+              f'Имя пользователя - {load_json["user_name"]}\n'
+              f'Email пользователя - {load_json["email"]}\n'
+              f'Пароль пользователя - {load_json["passw"]}\n'
+              f'Имя репозитория - {load_json["repo_name"]}\n'
+              f'Имя файла - {load_json["file_name"]}\n'
+              f'Локальный хэш текста - {load_json["file_hash"]}\n'
+              f'Хэш текста из браузера - {load_json["hash_text_from_gitea"]}\n'
+              f'********************************************************************************')
