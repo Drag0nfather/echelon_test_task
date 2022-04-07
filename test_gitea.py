@@ -1,16 +1,17 @@
 import json
 import os
 import time
+
+import docker
+import pytest
 import requests
 from mimesis import Person, Text
-import pytest
 from selenium import webdriver
-from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-import docker
+from selenium.webdriver.support.wait import WebDriverWait
 
 
 class TestGitea:
@@ -25,7 +26,7 @@ class TestGitea:
         driver.close()
 
     def clicker(self, driver, elem, check_status=False):
-        wait_elem = WebDriverWait(driver, 20).until(
+        wait_elem = WebDriverWait(driver, 8).until(
             EC.element_to_be_clickable((By.XPATH, elem)))
         if check_status:
             return True if wait_elem else False
@@ -40,6 +41,7 @@ class TestGitea:
         client = docker.from_env()
         client.containers.run(image='gitea/gitea', detach=True, ports={'3000/tcp': 3000}, name='gitea')
         gitea_page = 'http://localhost:3000/'
+        time.sleep(5)
         for i in range(10):
             resp_status = requests.get(gitea_page).status_code
             if resp_status == 200:
@@ -47,6 +49,18 @@ class TestGitea:
             else:
                 time.sleep(5)
         assert resp_status == 200, 'Не получилось запустить контейнер с Gitea'
+
+    def test_setup_db(self, setup_session):
+        driver, action = setup_session
+        db_status = self.clicker(driver, '//button[text()="Установить Gitea"]', check_status=True)
+        if db_status:
+            self.clicker(driver, '//button[text()="Установить Gitea"]')
+            time.sleep(5)
+            driver.refresh()
+            status = self.clicker(driver, '//button[contains(text(), "Вход")]', check_status=True)
+            assert status == True, 'Установка параметров БД прошла неуспешно'
+        else:
+            assert True == True
 
     def test_page_availability(self):
         gitea_page = requests.get(
@@ -79,11 +93,11 @@ class TestGitea:
         with open(os.path.join(os.getcwd(), "user_data.json")) as f:
             load_json = json.load(f)
             os.remove(os.path.join(os.getcwd(), "user_data.json"))
-        self.clicker(driver, '//a[@href="/user/login?redirect_to="]')
+        self.clicker(driver, '//a[@rel="nofollow"]')
         self.input_value(driver, action, '//input[@id="user_name"]', load_json['email'])
         self.input_value(driver, action, '//input[@id="password"]', load_json['passw'])
         self.clicker(driver, '//button[contains(text(), "Вход")]')
-        self.clicker(driver, '//div[@class="ui right"]/a[@href="/repo/create"]')
+        self.clicker(driver, '//a[@data-content="Новый репозиторий"]')
         repo_name = mimesis_text.word()
         load_json['repo_name'] = repo_name
         self.input_value(driver, action, '//input[@id="repo_name"]', repo_name)
@@ -102,14 +116,14 @@ class TestGitea:
         with open(os.path.join(os.getcwd(), "user_data.json")) as f:
             load_json = json.load(f)
             os.remove(os.path.join(os.getcwd(), "user_data.json"))
-        self.clicker(driver, '//a[@href="/user/login?redirect_to="]')
+        self.clicker(driver, '//a[@rel="nofollow"]')
         self.input_value(driver, action, '//input[@id="user_name"]', load_json['email'])
         self.input_value(driver, action, '//input[@id="password"]', load_json['passw'])
         self.clicker(driver, '//button[contains(text(), "Вход")]')
         self.clicker(driver, f'//strong[text()="{load_json["user_name"]}/{load_json["repo_name"]}"]')
         self.clicker(driver, '//a[contains(text(), "Новый файл")]')
         self.input_value(driver, action, '//input[@id="file-name"]', mimesis_file_name)
-        self.input_value(driver, action, '//pre[@class=" CodeMirror-line "]', mimesis_text)
+        self.input_value(driver, action, '//div[@class="view-line"]', mimesis_text)
         self.clicker(driver, '//button[@id="commit-button"]')
         load_json['file_name'] = mimesis_file_name
         load_json['file_hash'] = mimesis_text.__hash__()
@@ -127,7 +141,7 @@ class TestGitea:
         with open(os.path.join(os.getcwd(), "user_data.json")) as f:
             load_json = json.load(f)
             os.remove(os.path.join(os.getcwd(), "user_data.json"))
-        self.clicker(driver, '//a[@href="/user/login?redirect_to="]')
+        self.clicker(driver, '//a[@rel="nofollow"]')
         self.input_value(driver, action, '//input[@id="user_name"]', load_json['email'])
         self.input_value(driver, action, '//input[@id="password"]', load_json['passw'])
         self.clicker(driver, '//button[contains(text(), "Вход")]')
@@ -149,10 +163,9 @@ class TestGitea:
         asdf.stop()
         asdf.remove()
         gitea_page = 'http://localhost:3000/'
-        for i in range(10):
+        time.sleep(5)
+        try:
             resp_status = requests.get(gitea_page).status_code
-            if resp_status != 200:
-                break
-            else:
-                time.sleep(5)
+        except:
+            resp_status = 500
         assert resp_status != 200, 'Не получилось погасить контейнер с Gitea'
